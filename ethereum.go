@@ -3,6 +3,7 @@ package ethereum
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -191,12 +192,16 @@ func (c *Client) GetTransactionReceipt(hash string) (*ethgo.Receipt, error) {
 }
 
 // WaitForTransactionReceipt waits for the transaction receipt for the given transaction hash.
-func (c *Client) WaitForTransactionReceipt(hash string) *sobek.Promise {
+func (c *Client) WaitForTransactionReceipt(hash string, timeout int) *sobek.Promise {
 	promise, resolve, reject := c.makeHandledPromise()
 	now := time.Now()
 
 	go func() {
 		for {
+			if time.Since(now) > time.Duration(timeout)*time.Second {
+				reject(errors.New("timed out while waiting for receipt"))
+				return
+			}
 			receipt, err := c.GetTransactionReceipt(hash)
 			if err != nil {
 				if err.Error() != "not found" {
@@ -341,7 +346,9 @@ func (c *Client) pollForBlocks() {
 	for range time.Tick(500 * time.Millisecond) {
 		blockNumber, err := c.BlockNumber()
 		if err != nil {
-			panic(err)
+			//panic(err)
+			fmt.Println("WARN: Recieved an error during block polling. Continuing, but it's indicative of an issue", err)
+			continue
 		}
 
 		if blockNumber > lastBlockNumber {
@@ -351,11 +358,17 @@ func (c *Client) pollForBlocks() {
 
 			block, err := c.GetBlockByNumber(ethgo.BlockNumber(blockNumber), false)
 			if err != nil {
-				panic(err)
+				//panic(err)
+				fmt.Println("WARN: Recieved an error during block polling. Continuing, but it's indicative of an issue", err)
+				continue
 			}
 			if block == nil {
 				// We're not going to continue past this point if we don't have a block
 				continue
+			}
+			var blocksProduced uint64 = 0
+			if lastBlockNumber != 0 {
+				blocksProduced = blockNumber - lastBlockNumber
 			}
 			lastBlockNumber = blockNumber
 
@@ -377,7 +390,6 @@ func (c *Client) pollForBlocks() {
 					// We already have a block number for this client, so we can skip this
 					continue
 				}
-
 				metrics.PushIfNotDone(c.vu.Context(), c.vu.State().Samples, metrics.ConnectedSamples{
 					Samples: []metrics.Sample{
 						{
@@ -389,7 +401,7 @@ func (c *Client) pollForBlocks() {
 									"gas_limit":    strconv.Itoa(int(block.GasLimit)),
 								}),
 							},
-							Value: float64(blockNumber),
+							Value: float64(blocksProduced),
 							Time:  time.Now(),
 						},
 						{
