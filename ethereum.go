@@ -55,6 +55,10 @@ func (c *Client) Call(method string, params ...interface{}) (interface{}, error)
 	return out, err
 }
 
+func (c *Client) Close() error {
+	return c.client.Close()
+}
+
 func (c *Client) GasPrice() (uint64, error) {
 	t := time.Now()
 	g, err := c.client.Eth().GasPrice()
