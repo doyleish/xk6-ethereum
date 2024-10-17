@@ -99,6 +99,7 @@ func (mi *ModuleInstance) NewClient(call sobek.ConstructorCall) *sobek.Object {
 	}
 
 	c, err := jsonrpc.NewClient(opts.URL)
+	c.SetMaxConnsLimit(50)
 	if err != nil {
 		common.Throw(rt, fmt.Errorf("invalid options; reason: %w", err))
 	}
